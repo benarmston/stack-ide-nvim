@@ -131,6 +131,9 @@ class StackIde(object):
         self.vim = vim
         self.debug = DebugHandler(vim)
 
+        # Map of (project_root, target) to stack-ide API.
+        self.apis = {}
+
         # Callables to handle updating vim.
         #
         # Pulling these out of this class allows them to maintain state
@@ -138,31 +141,38 @@ class StackIde(object):
         self.exp_types_handler = ExpTypesHandler(vim, self.debug)
 
 
-    def initialze(self, filename):
-        #
-        # (cd <directory containing file> ; stack path)
-        # get project root and config file from output (parse as yaml).
-        #
-        # pass path to stack yaml, target and project root directory to
-        # StackIdeManager.
-        # run stack --stack-yaml <path to stack yaml> <selected target>
+    def api_for_current_buffer(self):
+        buffer = self.vim.current.buffer
+        target = buffer.vars['stack_ide_target']
+        project_root = buffer.vars['stack_ide_project_root']
+        return self.apis[(project_root, target)]
 
-        proc = subprocess.Popen(["stack", "path"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                cwd=os.path.dirname(os.path.realpath(filename))
-                )
-        outs, errs = proc.communicate(timeout=1)
-        lines = outs.decode('UTF-8').split("\n")
-        project_root = [
-                l.lstrip('project-root:').lstrip()
-                for l in lines
-                if l.startswith('project-root:')
-                ][0]
-        stack_yaml = [
-                l.lstrip('config-location:').lstrip()
-                for l in lines
-                if l.startswith('config-location:')
-                ][0]
+
+    def initialize_buffer(self, filename):
+        buffer = self.vim.current.buffer
+        target = buffer.vars.get('stack_ide_target')
+        project_root = buffer.vars.get('stack_ide_project_root')
+        stack_yaml = buffer.vars.get('stack_ide_stack_yaml')
+
+        if project_root is None or stack_yaml is None:
+            proc = subprocess.Popen(["stack", "path"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=os.path.dirname(os.path.realpath(filename))
+                    )
+            outs, errs = proc.communicate(timeout=1)
+            lines = outs.decode('UTF-8').split("\n")
+            if project_root is None:
+                project_root = [
+                        l.lstrip('project-root:').lstrip()
+                        for l in lines
+                        if l.startswith('project-root:')
+                        ][0]
+            if stack_yaml is None:
+                stack_yaml = [
+                        l.lstrip('config-location:').lstrip()
+                        for l in lines
+                        if l.startswith('config-location:')
+                        ][0]
 
         # target is the entry in the stack.yml configuration file. If there is
         # only one entry it is not needed. If there are multiple we must
@@ -172,31 +182,34 @@ class StackIde(object):
         # configuration file. If there is only one, there is no need to ask
         # the user. If there is more than one, we could ask the user to select
         # from a list.
-        target = self.vim.eval('input("Specify taget for stack-ide: ")')
+        if target is None:
+            target = self.vim.eval('input("Specify taget for stack-ide: ")')
 
-        self.project_root = project_root
-        manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
-        self.api = StackIdeApi(manager)
+        buffer.vars['stack_ide_target'] = target
+        buffer.vars['stack_ide_project_root'] = project_root 
+        buffer.vars['stack_ide_stack_yaml'] = stack_yaml
+
+        api = self.apis.get((project_root, target))
+        if api is None:
+            manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
+            api = StackIdeApi(manager)
+            self.apis[(project_root, target)] = api
 
 
-    @neovim.autocmd('BufEnter', pattern='*.hs', eval='expand("<afile>")',
-                    sync=False)
+    @neovim.autocmd('BufNewFile,BufRead', pattern='*.hs', eval='expand("<afile>")',
+                    sync=True)
     def autocmd_handler(self, filename):
-        # Don't initialze on the additional times we enter a buffer.
-        # Just create one stack-ide per buffer.
-        # Can we use the same stack-ide for buffers which are in the same
-        # project? and target?
-        self.initialze(filename)
+        self.initialize_buffer(filename)
 
 
-    @neovim.command('GetSourceErrors', sync=False)
+    @neovim.command('GetSourceErrors', sync=True)
     def get_source_errors(self):
-        self.api.get_source_errors()
+        self.api_for_current_buffer().get_source_errors()
 
 
-    @neovim.command('GetLoadedModules', sync=False)
+    @neovim.command('GetLoadedModules', sync=True)
     def get_loaded_modules(self):
-        self.api.get_loaded_modules()
+        self.api_for_current_buffer().get_loaded_modules()
 
 
     @neovim.command('ExpandExpTypes', sync=True)
@@ -211,12 +224,13 @@ class StackIde(object):
 
     @neovim.command('GetExpTypes', sync=True)
     def get_exp_types(self):
-        s = 'substitute(expand("%:p"), "{0}" . "/", "", "")'.format(self.project_root)
+        project_root = self.vim.current.buffer.vars['stack_ide_project_root']
+        s = 'substitute(expand("%:p"), "{0}" . "/", "", "")'.format(project_root)
         filename = self.vim.eval(s)
 
         [line, col] = self.vim.current.window.cursor
         source_span = SourceSpan(filename, line, line, col+1, col+2)
-        self.api.get_exp_types(source_span)
+        self.api_for_current_buffer().get_exp_types(source_span)
 
 
     def __call__(self, tag, contents):
