@@ -120,15 +120,12 @@ class StackIdeManager(object):
                 raw = self.process.stdout.readline().decode('UTF-8')
                 if not raw:
                     return
-                #  self.debug("Raw response: {0}".format(raw))
 
                 data = json.loads(raw)
-                #  self.debug("Got response: ", data)
-
                 response = data.get("tag")
                 contents = data.get("contents")
-                #  self.debug("Got contents: ", contents)
 
+                self.debug("< {0}".format(raw))
                 self.response_handler(response, contents)
 
             except:

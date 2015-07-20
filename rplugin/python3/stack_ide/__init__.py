@@ -238,9 +238,6 @@ class StackIde(object):
 
 
     def dispatch(self, tag, contents):
-        response = {'tag': tag, 'contents': contents}
-        self.debug("< {0}".format(json.JSONEncoder().encode(response)))
-
         if tag == 'ResponseGetExpTypes':
             self.exp_types_handler(contents)
 
