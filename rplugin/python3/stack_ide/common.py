@@ -64,14 +64,14 @@ class SourceSpan(object):
 #
 # Deals with startup and shutdown.
 # Provides low-level method for making requests.
-# Calls given responseHandler with result.
+# Calls given response_handler with result.
 #
 class StackIdeManager(object):
-    def __init__(self, project_root, target, stack_yaml_path, responseHandler, debug):
+    def __init__(self, project_root, target, stack_yaml_path, response_handler, debug):
         self.project_root = project_root
         self.target = target
         self.stack_yaml_path = stack_yaml_path
-        self.responseHandler = responseHandler
+        self.response_handler = response_handler
         self.debug = debug
         self.boot_ide_backend()
 
@@ -129,7 +129,7 @@ class StackIdeManager(object):
                 contents = data.get("contents")
                 #  self.debug("Got contents: ", contents)
 
-                self.responseHandler(response, contents)
+                self.response_handler(response, contents)
 
             except:
                 self.debug("Stack-IDE stdout process ending due to exception: {0}".format(sys.exc_info()))
