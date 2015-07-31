@@ -149,6 +149,16 @@ class StackIde(object):
 
 
     def initialize_buffer(self, filename):
+        target, project_root, stack_yaml = self.determine_stack_ide_vars(filename)
+
+        api = self.apis.get((project_root, target))
+        if api is None:
+            manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
+            api = StackIdeApi(manager)
+            self.apis[(project_root, target)] = api
+
+
+    def determine_stack_ide_vars(self, filename):
         buffer = self.vim.current.buffer
         target = buffer.vars.get('stack_ide_target')
         project_root = buffer.vars.get('stack_ide_project_root')
@@ -161,18 +171,22 @@ class StackIde(object):
                     )
             outs, errs = proc.communicate(timeout=1)
             lines = outs.decode('UTF-8').split("\n")
+
             if project_root is None:
                 project_root = [
                         l.lstrip('project-root:').lstrip()
                         for l in lines
                         if l.startswith('project-root:')
                         ][0]
+                buffer.vars['stack_ide_project_root'] = project_root 
+
             if stack_yaml is None:
                 stack_yaml = [
                         l.lstrip('config-location:').lstrip()
                         for l in lines
                         if l.startswith('config-location:')
                         ][0]
+                buffer.vars['stack_ide_stack_yaml'] = stack_yaml
 
         # target is the entry in the stack.yml configuration file. If there is
         # only one entry it is not needed. If there are multiple we must
@@ -184,16 +198,9 @@ class StackIde(object):
         # from a list.
         if target is None:
             target = self.vim.eval('input("Specify taget for stack-ide: ")')
+            buffer.vars['stack_ide_target'] = target
 
-        buffer.vars['stack_ide_target'] = target
-        buffer.vars['stack_ide_project_root'] = project_root 
-        buffer.vars['stack_ide_stack_yaml'] = stack_yaml
-
-        api = self.apis.get((project_root, target))
-        if api is None:
-            manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
-            api = StackIdeApi(manager)
-            self.apis[(project_root, target)] = api
+        return target, project_root, stack_yaml
 
 
     @neovim.autocmd('BufNewFile,BufRead', pattern='*.hs', eval='expand("<afile>")',
