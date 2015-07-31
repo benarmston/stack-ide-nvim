@@ -197,7 +197,16 @@ class StackIde(object):
         # the user. If there is more than one, we could ask the user to select
         # from a list.
         if target is None:
-            target = self.vim.eval('input("Specify taget for stack-ide: ")')
+            cabal_files = [
+                    f 
+                    for f in os.listdir(project_root)
+                    if f.endswith('.cabal')
+                    ]
+            if len(cabal_files) > 0:
+                cabal_file = cabal_files[0] if len(cabal_files) > 0 else None
+                target = cabal_file.rstrip('.cabal')
+            else:
+                target = self.vim.eval('input("Specify taget for stack-ide: ")')
             buffer.vars['stack_ide_target'] = target
 
         return target, project_root, stack_yaml
