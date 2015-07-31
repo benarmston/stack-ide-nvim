@@ -191,25 +191,28 @@ class StackIde(object):
         # target is the entry in the stack.yml configuration file. If there is
         # only one entry it is not needed. If there are multiple we must
         # specify one.
-        #
-        # XXX Improve this to load the list of targets from the stack
-        # configuration file. If there is only one, there is no need to ask
-        # the user. If there is more than one, we could ask the user to select
-        # from a list.
         if target is None:
-            cabal_files = [
-                    f 
-                    for f in os.listdir(project_root)
-                    if f.endswith('.cabal')
-                    ]
-            if len(cabal_files) > 0:
-                cabal_file = cabal_files[0] if len(cabal_files) > 0 else None
-                target = cabal_file.rstrip('.cabal')
-            else:
+            target = self.guess_target(filename, project_root, stack_yaml)
+            if target is None:
                 target = self.vim.eval('input("Specify taget for stack-ide: ")')
             buffer.vars['stack_ide_target'] = target
 
         return target, project_root, stack_yaml
+
+
+    # XXX Improve this to load the list of targets from the stack
+    # configuration file. If there is only one, there is no need to ask the
+    # user. If there is more than one, we could ask the user to select from a
+    # list.
+    def guess_target(self, filename, project_root, stack_yaml):
+        target = None
+        for d in walkup(os.path.dirname(os.path.realpath(filename))):
+            cabal_files = [ f for f in os.listdir(d) if f.endswith('.cabal') ]
+            if len(cabal_files) > 0:
+                cabal_file = cabal_files[0] if len(cabal_files) > 0 else None
+                target = cabal_file.rstrip('.cabal')
+                break
+        return target
 
 
     @neovim.autocmd('BufNewFile,BufRead', pattern='*.hs', eval='expand("<afile>")',
@@ -260,3 +263,15 @@ class StackIde(object):
 
     def __del__(self):
         self.manager.terminate()
+
+
+def walkup(path): 
+    """Yield the given path and each of its parent directories"""
+    at_top = False 
+    while not at_top: 
+        yield path 
+        parent_path = os.path.dirname(path) 
+        if parent_path == path: 
+            at_top = True 
+        else: 
+            path = parent_path 
