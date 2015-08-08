@@ -153,6 +153,7 @@ class StackIde(object):
         api = self.apis.get((project_root, target))
         if api is None:
             manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
+            manager.boot_ide_backend()
             api = StackIdeApi(manager)
             self.apis[(project_root, target)] = api
 

@@ -95,21 +95,16 @@ class SourceSpan(object):
                 }
 
 
-#
-# Manager for a stack-ide process.
-#
-# Deals with startup and shutdown.
-# Provides low-level method for making requests.
-# Calls given response_handler with result.
-#
 class StackIdeManager(object):
+    """
+    Manages a single stack ide process.
+    """
     def __init__(self, project_root, target, stack_yaml_path, response_handler, debug):
         self.project_root = project_root
         self.target = target
         self.stack_yaml_path = stack_yaml_path
         self.response_handler = response_handler
         self.debug = debug
-        self.boot_ide_backend()
 
 
     def boot_ide_backend(self):
@@ -120,10 +115,83 @@ class StackIdeManager(object):
                 self.project_root, self.target, self.stack_yaml_path)
         self.debug(msg)
 
+        self.process = ProcessManager(
+                name="stack ide",
+                process_args=["stack", "--stack-yaml", self.stack_yaml_path, "ide", self.target],
+                on_stdout=self.on_stdout,
+                on_stderr=self.on_stderr,
+                cwd=self.project_root,
+                debug=self.debug
+                )
+        self.process.launch()
+
+
+    def on_stderr(self, error):
+        pass
+
+
+    def on_stdout(self, line):
+        """
+        Process each line of standard output.
+        """
+        data = json.loads(line)
+        tag = data.get("tag")
+        contents = data.get("contents")
+
+        self.response_handler(tag, contents)
+
+
+    def end(self):
+        """
+        Ask stack-ide to shut down.
+        """
+        self.send_request("RequestShutdownSession", [])
+
+
+    def send_request(self, tag, contents):
+        if self.process.is_running:
+            request = {"tag": tag, "contents": contents}
+            encodedString = json.JSONEncoder().encode(request) + "\n"
+            self.process.send_input(encodedString)
+        else:
+            self.debug("Couldn't send request, no process!")
+
+
+    def __del__(self):
+        if self.process:
+            self.process.terminate()
+            self.process = None
+
+
+
+class ProcessManager(object):
+    """
+    Manages a single process.
+
+    - Deals with startup and shutdown.
+    - Provides low-level method for making requests.
+    - Calls given response_handler with result.
+    """
+    def __init__(self, name, process_args, on_stdout, on_stderr, cwd, debug):
+        self.name = name
+        self.process_args = process_args
+        self.on_stdout = on_stdout
+        self.on_stderr = on_stderr
+        self.cwd = cwd
+        self.debug = debug
+
+
+    def launch(self):
+        """
+        Start a subprocess and threads to consume its stdout and stderr.
+        """
+        msg = "Launching process {0}".format(self.name)
+        self.debug(msg)
+
         self.process = subprocess.Popen(
-                ["stack", "--stack-yaml", self.stack_yaml_path, "ide", self.target],
+                self.process_args,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                cwd=self.project_root
+                cwd=self.cwd
                 )
 
         self.stdoutThread = threading.Thread(target=self.read_stdout)
@@ -135,16 +203,16 @@ class StackIdeManager(object):
 
     def read_stderr(self):
         """
-        Reads any errors from the stack-ide process.
+        Read and process any errors.
         """
         while self.process.poll() is None:
             try:
                 error = self.process.stderr.readline().decode('UTF-8')
-                self.debug("Stack-IDE error: {0}".format(error))
+                self.debug(error)
             except:
-                self.debug("Stack-IDE stderr process ending due to exception: {0}".format(sys.exc_info()))
-                return;
-        self.debug("Stack-IDE stderr process ended.")
+                self.debug("Process {0} ending due to exception: {1}".format(self.name, sys.exc_info()))
+                return
+        self.debug("Process {0} ended.".format(self.name))
 
 
     def read_stdout(self):
@@ -153,36 +221,20 @@ class StackIdeManager(object):
         """
         while self.process.poll() is None:
             try:
-                raw = self.process.stdout.readline().decode('UTF-8')
-                if not raw:
+                line = self.process.stdout.readline().decode('UTF-8')
+                if not line:
                     return
-
-                data = json.loads(raw)
-                response = data.get("tag")
-                contents = data.get("contents")
-
-                self.debug("< {0}".format(raw))
-                self.response_handler(response, contents)
-
+                self.debug("< {0}".format(line))
+                self.on_stdout(line)
             except:
-                self.debug("Stack-IDE stdout process ending due to exception: {0}".format(sys.exc_info()))
-                self.process.terminate()
-                self.process = None
-                return;
-        self.debug("Stack-IDE stdout process ended.")
+                self.debug("Process {0} ending due to exception: {1}".format(self.name, sys.exc_info()))
+                self.terminate()
+                return
+        self.debug("Process {0} ended.".format(self.name))
 
 
-    def end(self):
-        """
-        Ask stack-ide to shut down.
-        """
-        self.send_request("RequestShutdownSession", [])
-
-
-    def send_request(self, tag, contents):
+    def send_input(self, encodedString):
         if self.process:
-            request = {"tag": tag, "contents": contents}
-            encodedString = json.JSONEncoder().encode(request) + "\n"
             self.debug("> {0}".format(encodedString))
             self.process.stdin.write(bytes(encodedString, 'UTF-8'))
             self.process.stdin.flush()
@@ -190,8 +242,15 @@ class StackIdeManager(object):
             self.debug("Couldn't send request, no process!")
 
 
+    def is_running(self):
+        self.process is not None and self.process.poll() is None
+
+
+    def terminate(self):
+        self.process.terminate()
+        self.process = None
+
 
     def __del__(self):
         if self.process and (self.process.poll() is None):
-            self.process.terminate()
-            self.process = None
+            self.terminate()
