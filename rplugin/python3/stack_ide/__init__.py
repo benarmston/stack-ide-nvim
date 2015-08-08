@@ -26,22 +26,28 @@ class ExpTypesHandler(object):
             self.types = types
             self.types_index = 0
 
-            # XXX Make sure that this is being done in the correct buffer.
             self.echo_type()
             self.clear_highlight()
             self.highlight_type()
         else:
             pass
 
+        # We expect only a single response.
+        return 'done'
+
+
+    def threadsafe_call(self, fn):
+        self.vim.session.threadsafe_call(fn)
+
 
     def echo_type(self):
         [type_string, _span] = self.types[self.types_index]
-        self.vim.command("echomsg '{0}'".format(type_string))
+        self.threadsafe_call(lambda: self.vim.command("echomsg '{0}'".format(type_string)))
 
 
     def clear_highlight(self):
         for match_num in self.match_nums:
-            self.vim.eval("matchdelete({0})".format(match_num))
+            self.threadsafe_call(lambda: self.vim.eval("matchdelete({0})".format(match_num)))
         self.match_nums.clear()
 
 
@@ -53,32 +59,35 @@ class ExpTypesHandler(object):
 
 
     def highlight_type(self):
-        [_type_string, span] = self.types[self.types_index]
-        [from_line, to_line, from_column, to_column] = unpack_span(span)
-        if (from_line == to_line):
-            length = to_column - from_column
-            positions = ["[[{0}, {1}, {2}]]".format(from_line, from_column, length)]
-        else:
-            first_line_length = len(self.vim.current.buffer[from_line - 1])
-            highlight_length = first_line_length - from_column + 1
-            first_line_pos = "[{0}, {1}, {2}]".format(from_line, from_column, highlight_length)
-            last_line_pos  = "[{0}, 0, {1}]".format(to_line, to_column)
-            other_line_pos = []
-            for i in range(from_line + 1, to_line):
-                other_line_pos.append("[{0}]".format(i))
-            lines = [first_line_pos] + other_line_pos + [last_line_pos]
-            # Vim's matchaddpos can only take 8 positions, so we need to work
-            # around that.
-            chunk_size = 8
-            if len(lines) > chunk_size:
-                chunked_lines = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
-                positions = []
-                for l in chunked_lines:
-                    positions.append("[{0}]".format(",".join(l)))
+        def go():
+            [_type_string, span] = self.types[self.types_index]
+            [from_line, to_line, from_column, to_column] = unpack_span(span)
+            if (from_line == to_line):
+                length = to_column - from_column
+                positions = ["[[{0}, {1}, {2}]]".format(from_line, from_column, length)]
             else:
-                positions = ["[{0}]".format(",".join(lines))]
-        for pos in positions:
-            self.match_nums.append(self.vim.eval("matchaddpos('Visual', {0})".format(pos)))
+                first_line_length = len(self.vim.current.buffer[from_line - 1])
+                highlight_length = first_line_length - from_column + 1
+                first_line_pos = "[{0}, {1}, {2}]".format(from_line, from_column, highlight_length)
+                last_line_pos  = "[{0}, 0, {1}]".format(to_line, to_column)
+                other_line_pos = []
+                for i in range(from_line + 1, to_line):
+                    other_line_pos.append("[{0}]".format(i))
+                lines = [first_line_pos] + other_line_pos + [last_line_pos]
+                # Vim's matchaddpos can only take 8 positions, so we need to work
+                # around that.
+                chunk_size = 8
+                if len(lines) > chunk_size:
+                    chunked_lines = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
+                    positions = []
+                    for l in chunked_lines:
+                        positions.append("[{0}]".format(",".join(l)))
+                else:
+                    positions = ["[{0}]".format(",".join(lines))]
+            for pos in positions:
+                match_num = self.vim.eval("matchaddpos('Visual', {0})".format(pos))
+                self.match_nums.append(match_num)
+        self.threadsafe_call(go)
 
 
     def expand_exp_types(self):
@@ -153,8 +162,9 @@ class StackIde(object):
         api = self.apis.get((project_root, target))
         if api is None:
             manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
+            intercepter = BlockingIntercepter(manager)
             manager.boot_ide_backend()
-            api = StackIdeApi(manager)
+            api = StackIdeApi(intercepter)
             self.apis[(project_root, target)] = api
 
 
@@ -222,12 +232,21 @@ class StackIde(object):
 
 
     def __call__(self, tag, contents):
-        self.vim.session.threadsafe_call(self.dispatch, tag, contents)
+        return self.dispatch(tag, contents)
 
 
     def dispatch(self, tag, contents):
         if tag == 'ResponseGetExpTypes':
-            self.exp_types_handler(contents)
+            return self.exp_types_handler(contents)
+        elif tag == 'ResponseInvalidRequest':
+            return 'done'
+        elif tag == 'ResponseWelcome':
+            return 'done'
+        elif tag == 'ResponseUpdateSession':
+            if contents is None:
+                return 'done'
+            else:
+                return 'cont'
 
 
     def __del__(self):

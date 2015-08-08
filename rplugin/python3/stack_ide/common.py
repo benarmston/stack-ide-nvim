@@ -1,4 +1,5 @@
 import json
+from collections import deque
 import os
 import subprocess
 import sys
@@ -95,6 +96,52 @@ class SourceSpan(object):
                 }
 
 
+class BlockingIntercepter(object):
+    def __init__(self, manager):
+        self.response_handler = manager.response_handler
+        manager.response_handler = self.handle_response
+        self.manager = manager
+        self.command_queue = deque()
+
+
+    def send_request(self, tag, contents):
+        event = threading.Event()
+        self.command_queue.append([tag, contents, event])
+        if len(self.command_queue) == 1:
+            self.send_next_request()
+        event.wait()
+
+
+    def send_next_request(self):
+        if len(self.command_queue) > 0:
+            [tag, contents, event] = self.command_queue[0]
+            if not self.manager.send_request(tag, contents):
+                event.set()
+
+
+    def handle_response(self, tag, contents):
+        if len(self.command_queue) > 0:
+            [_, _, event] = self.command_queue[0]
+        else:
+            event = None
+        resp = self.response_handler(tag, contents)
+        if resp == 'cont':
+            # The response_handler has not yet completed processing. We need
+            # to wait for more data.
+            pass
+        elif resp == 'done':
+            # The response_handler has finished processing the response. We
+            # can let the calling thread continue.
+            self.command_queue.popleft()
+            if event is not None:
+                event.set()
+            self.send_next_request()
+        else:
+            # XXX Error. What to do with the command_queue and the event?
+            pass
+
+
+
 class StackIdeManager(object):
     """
     Manages a single stack ide process.
@@ -152,9 +199,10 @@ class StackIdeManager(object):
         if self.process.is_running:
             request = {"tag": tag, "contents": contents}
             encodedString = json.JSONEncoder().encode(request) + "\n"
-            self.process.send_input(encodedString)
+            return self.process.send_input(encodedString)
         else:
             self.debug("Couldn't send request, no process!")
+            return False
 
 
     def __del__(self):
@@ -238,8 +286,10 @@ class ProcessManager(object):
             self.debug("> {0}".format(encodedString))
             self.process.stdin.write(bytes(encodedString, 'UTF-8'))
             self.process.stdin.flush()
+            return True
         else:
             self.debug("Couldn't send request, no process!")
+            return False
 
 
     def is_running(self):
