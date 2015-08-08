@@ -1,7 +1,44 @@
 import json
+import os
 import subprocess
 import sys
 import threading
+
+
+# XXX Improve this to load the list of targets from the stack
+# configuration file. If there is only one, there is no need to ask the
+# user. If there is more than one, we could ask the user to select from a
+# list.
+def guess_stack_target(filename, project_root, stack_yaml):
+    target = None
+    for d in walkup(os.path.dirname(os.path.realpath(filename))):
+        cabal_files = [ f for f in os.listdir(d) if f.endswith('.cabal') ]
+        if len(cabal_files) > 0:
+            cabal_file = cabal_files[0] if len(cabal_files) > 0 else None
+            target = cabal_file.rstrip('.cabal')
+            break
+    return target
+
+
+def get_stack_path(path_type, cwd):
+    return subprocess.check_output(
+            ["stack", "path", "--{0}".format(path_type)],
+            universal_newlines=True,
+            timeout=2,
+            cwd=cwd
+            ).rstrip()
+
+
+def walkup(path): 
+    """Yield the given path and each of its parent directories"""
+    at_top = False 
+    while not at_top: 
+        yield path 
+        parent_path = os.path.dirname(path) 
+        if parent_path == path: 
+            at_top = True 
+        else: 
+            path = parent_path 
 
 #
 # API for making requests to a stack-ide process.
