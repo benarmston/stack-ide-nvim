@@ -140,7 +140,7 @@ class BlockingIntercepter(object):
             self.send_next_request()
         elif resp == 'error':
             # Get everything back to a consistent state.
-            self.debug("BlockingIntercepter got error response. Clearing command_queue")
+            self.debug("+ BlockingIntercepter got error response. Clearing command_queue")
             if event is not None:
                 event.set()
             for e in self.command_queue:
@@ -165,7 +165,7 @@ class StackIdeManager(object):
         """
         Start a stack-ide subprocess for the target, and a thread to consume its stdout.
         """
-        msg = "Launching stack-ide instance in {0} for target {1} using config {2}".format(
+        msg = "+ Launching stack-ide instance in {0} for target {1} using config {2}".format(
                 self.project_root, self.target, self.stack_yaml_path)
         self.debug(msg)
 
@@ -208,7 +208,7 @@ class StackIdeManager(object):
             encodedString = json.JSONEncoder().encode(request) + "\n"
             return self.process.send_input(encodedString)
         else:
-            self.debug("Couldn't send request, no process!")
+            self.debug("+ Couldn't send request, no process!")
             return False
 
 
@@ -240,7 +240,7 @@ class ProcessManager(object):
         """
         Start a subprocess and threads to consume its stdout and stderr.
         """
-        msg = "Launching process {0}".format(self.name)
+        msg = "+ Launching process {0}".format(self.name)
         self.debug(msg)
 
         self.process = subprocess.Popen(
@@ -265,9 +265,9 @@ class ProcessManager(object):
                 error = self.process.stderr.readline().decode('UTF-8')
                 self.debug(error)
             except:
-                self.debug("Process {0} ending due to exception: {1}".format(self.name, sys.exc_info()))
+                self.debug("+ Process {0} ending due to exception: {1}".format(self.name, sys.exc_info()))
                 return
-        self.debug("Process {0} ended.".format(self.name))
+        self.debug("+ Process {0} ended.".format(self.name))
 
 
     def read_stdout(self):
@@ -286,7 +286,7 @@ class ProcessManager(object):
                 self.debug("+ Process {0} ending due to exception: {1}".format(self.name, exc))
                 self.terminate()
                 return
-        self.debug("Process {0} ended.".format(self.name))
+        self.debug("+ Process {0} ended.".format(self.name))
 
 
     def send_input(self, encodedString):
@@ -296,7 +296,7 @@ class ProcessManager(object):
             self.process.stdin.flush()
             return True
         else:
-            self.debug("Couldn't send request, no process!")
+            self.debug("+ Couldn't send request, no process!")
             return False
 
 
