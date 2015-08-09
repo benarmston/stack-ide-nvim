@@ -212,12 +212,6 @@ class StackIdeManager(object):
             return False
 
 
-    def __del__(self):
-        if self.process:
-            self.process.terminate()
-            self.process = None
-
-
 
 class ProcessManager(object):
     """

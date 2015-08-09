@@ -249,7 +249,3 @@ class StackIde(object):
                 return 'cont'
         else:
             return 'error'
-
-
-    def __del__(self):
-        self.manager.terminate()
