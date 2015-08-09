@@ -100,6 +100,43 @@ class ExpTypesHandler(object):
             self.highlight_type()
 
 
+
+class SpanInfoHandler(object):
+    def __init__(self, vim, debug):
+        self.vim = vim
+        self.debug = debug
+
+        self.infos = None
+        # self.infos_index = 0
+
+
+    def __call__(self, infos):
+        self.infos = infos
+        # self.infos_index = 0
+
+        if infos:
+            self.echo_info()
+
+        return 'done'
+
+
+    def threadsafe_call(self, fn):
+        self.vim.session.threadsafe_call(fn)
+
+
+    def echo_info(self):
+        info = self.infos[0][0]
+        props = info["contents"]["idProp"]
+        name = props["idName"]
+        definedIn = props["idDefinedIn"]
+        module_name = definedIn["moduleName"]
+        package_name = definedIn["modulePackage"]["packageName"]
+        msg = "{0}:{1}".format(package_name, module_name)
+        self.threadsafe_call(lambda: self.vim.command("echomsg '{0}'".format(msg)))
+
+
+
+
 def unpack_span(span):
     if span == None:
         return None
@@ -147,6 +184,7 @@ class StackIde(object):
         # Pulling these out of this class allows them to maintain state
         # without having to worry about name clashes.
         self.exp_types_handler = ExpTypesHandler(vim, self.debug)
+        self.span_info_handler = SpanInfoHandler(vim, self.debug)
 
 
     def api_for_current_buffer(self):
@@ -231,6 +269,17 @@ class StackIde(object):
         self.api_for_current_buffer().get_exp_types(source_span)
 
 
+    @neovim.command('GetSpanInfo', sync=True)
+    def get_span_info(self):
+        project_root = self.vim.current.buffer.vars['stack_ide_project_root']
+        s = 'substitute(expand("%:p"), "{0}" . "/", "", "")'.format(project_root)
+        filename = self.vim.eval(s)
+
+        [line, col] = self.vim.current.window.cursor
+        source_span = SourceSpan(filename, line, line, col+1, col+2)
+        self.api_for_current_buffer().get_span_info(source_span)
+
+
     def __call__(self, tag, contents):
         return self.dispatch(tag, contents)
 
@@ -238,6 +287,8 @@ class StackIde(object):
     def dispatch(self, tag, contents):
         if tag == 'ResponseGetExpTypes':
             return self.exp_types_handler(contents)
+        elif tag == 'ResponseGetSpanInfo':
+            return self.span_info_handler(contents)
         elif tag == 'ResponseInvalidRequest':
             return 'error'
         elif tag == 'ResponseWelcome':
