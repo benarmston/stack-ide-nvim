@@ -162,7 +162,7 @@ class StackIde(object):
         api = self.apis.get((project_root, target))
         if api is None:
             manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
-            intercepter = BlockingIntercepter(manager)
+            intercepter = BlockingIntercepter(manager, self.debug)
             manager.boot_ide_backend()
             api = StackIdeApi(intercepter)
             self.apis[(project_root, target)] = api
@@ -239,7 +239,7 @@ class StackIde(object):
         if tag == 'ResponseGetExpTypes':
             return self.exp_types_handler(contents)
         elif tag == 'ResponseInvalidRequest':
-            return 'done'
+            return 'error'
         elif tag == 'ResponseWelcome':
             return 'done'
         elif tag == 'ResponseUpdateSession':
@@ -247,6 +247,8 @@ class StackIde(object):
                 return 'done'
             else:
                 return 'cont'
+        else:
+            return 'error'
 
 
     def __del__(self):

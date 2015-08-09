@@ -97,10 +97,11 @@ class SourceSpan(object):
 
 
 class BlockingIntercepter(object):
-    def __init__(self, manager):
+    def __init__(self, manager, debug):
         self.response_handler = manager.response_handler
         manager.response_handler = self.handle_response
         self.manager = manager
+        self.debug = debug
         self.command_queue = deque()
 
 
@@ -132,13 +133,18 @@ class BlockingIntercepter(object):
         elif resp == 'done':
             # The response_handler has finished processing the response. We
             # can let the calling thread continue.
-            self.command_queue.popleft()
             if event is not None:
+                self.command_queue.popleft()
                 event.set()
             self.send_next_request()
-        else:
-            # XXX Error. What to do with the command_queue and the event?
-            pass
+        elif resp == 'error':
+            # Get everything back to a consistent state.
+            self.debug("BlockingIntercepter got error response. Clearing command_queue")
+            if event is not None:
+                event.set()
+            for e in self.command_queue:
+                e.set()
+            self.command_queue.clear()
 
 
 
