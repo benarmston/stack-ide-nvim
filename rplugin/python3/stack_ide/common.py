@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import threading
+import traceback
 
 
 # XXX Improve this to load the list of targets from the stack
@@ -281,7 +282,8 @@ class ProcessManager(object):
                 self.debug("< {0}".format(line))
                 self.on_stdout(line)
             except:
-                self.debug("Process {0} ending due to exception: {1}".format(self.name, sys.exc_info()))
+                exc = traceback.format_exception(*sys.exc_info())
+                self.debug("+ Process {0} ending due to exception: {1}".format(self.name, exc))
                 self.terminate()
                 return
         self.debug("Process {0} ended.".format(self.name))
