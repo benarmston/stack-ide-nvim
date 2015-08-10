@@ -126,27 +126,34 @@ class BlockingIntercepter(object):
             [_, _, event] = self.command_queue[0]
         else:
             event = None
-        resp = self.response_handler(tag, contents)
-        if resp == 'cont':
-            # The response_handler has not yet completed processing. We need
-            # to wait for more data.
-            pass
-        elif resp == 'done':
-            # The response_handler has finished processing the response. We
-            # can let the calling thread continue.
-            if event is not None:
-                self.command_queue.popleft()
-                event.set()
-            self.send_next_request()
-        elif resp == 'error':
-            # Get everything back to a consistent state.
-            self.debug("+ BlockingIntercepter got error response. Clearing command_queue")
-            if event is not None:
-                event.set()
-            for e in self.command_queue:
-                e.set()
-            self.command_queue.clear()
+        try:
+            resp = self.response_handler(tag, contents)
+        except:
+            exc = traceback.format_exception(*sys.exc_info())
+            self.debug("+ BlockingIntercepter handler raised. Clearing command_queue. {0}".format(exc))
+            self.clear_command_queue()
+        else:
+            if resp == 'cont':
+                # The response_handler has not yet completed processing. We need
+                # to wait for more data.
+                pass
+            elif resp == 'done':
+                # The response_handler has finished processing the response. We
+                # can let the calling thread continue.
+                if event is not None:
+                    self.command_queue.popleft()
+                    event.set()
+                self.send_next_request()
+            elif resp == 'error':
+                self.debug("+ BlockingIntercepter got error response. Clearing command_queue")
+                self.clear_command_queue()
 
+
+    def clear_command_queue(self):
+        # Get everything back to a consistent state.
+        for [_, _, event, _] in self.command_queue:
+            event.set()
+        self.command_queue.clear()
 
 
 class StackIdeManager(object):
