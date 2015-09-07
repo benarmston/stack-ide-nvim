@@ -91,7 +91,7 @@ class Process(object):
                 error = self._process.stderr.readline().decode('UTF-8')
                 self._debug(error)
                 if self._on_stderr is not None:
-                    self._on_stderr(line)
+                    self._on_stderr(error)
             except:
                 self._debug("+ Process {0} ending due to exception: {1}".format(self._name, sys.exc_info()))
                 return
