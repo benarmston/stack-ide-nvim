@@ -199,10 +199,7 @@ class StackIde(object):
 
         api = self.apis.get((project_root, target))
         if api is None:
-            manager = StackIdeManager(project_root, target, stack_yaml, self, self.debug)
-            intercepter = BlockingIntercepter(manager, self.debug)
-            manager.boot_ide_backend()
-            api = StackIdeApi(intercepter)
+            api = stack_ide_api_for(project_root, target, stack_yaml, self, self.debug)
             self.apis[(project_root, target)] = api
 
 
