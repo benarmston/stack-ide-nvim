@@ -16,7 +16,7 @@ def boot_stack_ide_process(project_root, target, stack_yaml_path, debug):
 
     process = Process(
             name="stack ide",
-            process_args=["stack", "--stack-yaml", stack_yaml_path, "ide", target],
+            process_args=["stack", "--stack-yaml", stack_yaml_path, "ide", "start", target],
             on_stdout=None,
             on_stderr=None,
             cwd=project_root,
