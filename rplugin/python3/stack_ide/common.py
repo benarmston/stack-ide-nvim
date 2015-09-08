@@ -11,9 +11,9 @@ except:
     from session import *
 
 
-def stack_ide_api_for(project_root, target, stack_yaml, on_response, debug):
+def stack_ide_api_for(project_root, target, stack_yaml, debug):
     stack_ide_process = boot_stack_ide_process(project_root, target, stack_yaml, debug)
-    async_session = AsyncSession(stack_ide_process, on_response, debug)
+    async_session = AsyncSession(stack_ide_process, debug)
     session = Session(async_session, debug)
     stack_ide_process.launch()
     api = StackIdeApi(session)

@@ -18,7 +18,7 @@ class ExpTypesHandler(object):
         self.types_index = 0
 
 
-    def __call__(self, types):
+    def __call__(self, tag, types):
         """
         Highlight the first expression type provided and echo the type to the status bar.
         """
@@ -110,7 +110,7 @@ class SpanInfoHandler(object):
         # self.infos_index = 0
 
 
-    def __call__(self, infos):
+    def __call__(self, tag, infos):
         self.infos = infos
         # self.infos_index = 0
 
@@ -199,7 +199,7 @@ class StackIde(object):
 
         api = self.apis.get((project_root, target))
         if api is None:
-            api = stack_ide_api_for(project_root, target, stack_yaml, self, self.debug)
+            api = stack_ide_api_for(project_root, target, stack_yaml, self.debug)
             self.apis[(project_root, target)] = api
 
 
@@ -263,7 +263,8 @@ class StackIde(object):
 
         [line, col] = self.vim.current.window.cursor
         source_span = SourceSpan(filename, line, line, col+1, col+2)
-        self.api_for_current_buffer().get_exp_types(source_span)
+        handler = self.exp_types_handler
+        self.api_for_current_buffer().get_exp_types(source_span, handler)
 
 
     @neovim.command('GetSpanInfo', sync=True)
@@ -274,26 +275,5 @@ class StackIde(object):
 
         [line, col] = self.vim.current.window.cursor
         source_span = SourceSpan(filename, line, line, col+1, col+2)
-        self.api_for_current_buffer().get_span_info(source_span)
-
-
-    def __call__(self, tag, contents):
-        return self.dispatch(tag, contents)
-
-
-    def dispatch(self, tag, contents):
-        if tag == 'ResponseGetExpTypes':
-            return self.exp_types_handler(contents)
-        elif tag == 'ResponseGetSpanInfo':
-            return self.span_info_handler(contents)
-        elif tag == 'ResponseInvalidRequest':
-            return 'error'
-        elif tag == 'ResponseWelcome':
-            return 'done'
-        elif tag == 'ResponseUpdateSession':
-            if contents is None:
-                return 'done'
-            else:
-                return 'cont'
-        else:
-            return 'error'
+        handler = self.span_info_handler
+        self.api_for_current_buffer().get_span_info(source_span, handler)
