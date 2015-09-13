@@ -135,6 +135,26 @@ class SpanInfoHandler(object):
         self.threadsafe_call(lambda: self.vim.command("echomsg '{0}'".format(msg)))
 
 
+class UpdateSessionHandler(object):
+    def __init__(self, vim, debug):
+        self._vim = vim
+        self._debug = debug
+
+
+    def __call__(self, tag, contents):
+        if contents.get("tag") == "UpdateStatusProgress":
+            msg = contents["contents"]["progressParsedMsg"]
+            self._out_write("{0}\n".format(msg))
+            return 'partial'
+        elif contents.get("tag") == "UpdateStatusDone":
+            return 'done'
+
+
+    def _threadsafe_call(self, fn):
+        self._vim.session.threadsafe_call(fn)
+
+    def _out_write(self, msg):
+        self._threadsafe_call(lambda: self._vim.out_write(msg))
 
 
 def unpack_span(span):
@@ -185,6 +205,7 @@ class StackIde(object):
         # without having to worry about name clashes.
         self.exp_types_handler = ExpTypesHandler(vim, self.debug)
         self.span_info_handler = SpanInfoHandler(vim, self.debug)
+        self._update_session_handler = UpdateSessionHandler(vim, self.debug)
 
 
     def api_for_current_buffer(self):
@@ -199,7 +220,7 @@ class StackIde(object):
 
         api = self.apis.get((project_root, target))
         if api is None:
-            api = stack_ide_api_for(project_root, target, stack_yaml, self.debug)
+            api = stack_ide_api_for(project_root, target, stack_yaml, self._default_handler, self.debug)
             self.apis[(project_root, target)] = api
 
 
@@ -277,3 +298,15 @@ class StackIde(object):
         source_span = SourceSpan(filename, line, line, col+1, col+2)
         handler = self.span_info_handler
         self.api_for_current_buffer().get_span_info(source_span, handler)
+
+
+    def _default_handler(self, tag, contents):
+        if tag == 'ResponseInvalidRequest':
+            self.debug("+ Invalid request")
+        elif tag == 'ResponseWelcome':
+            # self._stack_ide_api_version = contents
+            pass
+        elif tag == 'ResponseUpdateSession':
+            self._update_session_handler(tag, contents)
+        else:
+            self.debug("+ Unhandled response {0}".format(tag))

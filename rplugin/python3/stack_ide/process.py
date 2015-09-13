@@ -17,8 +17,6 @@ def boot_stack_ide_process(project_root, target, stack_yaml_path, debug):
     process = Process(
             name="stack ide",
             process_args=["stack", "--stack-yaml", stack_yaml_path, "ide", "start", target],
-            on_stdout=None,
-            on_stderr=None,
             cwd=project_root,
             debug=debug
             )
@@ -33,19 +31,19 @@ class Process(object):
     - Provides low-level method for making requests.
     - Calls given response_handler with result.
     """
-    def __init__(self, name, process_args, on_stdout, on_stderr, cwd, debug):
+    def __init__(self, name, process_args, cwd, debug):
         self._name = name
         self._process_args = process_args
-        self._on_stdout = on_stdout
-        self._on_stderr = on_stderr
         self._cwd = cwd
         self._debug = debug
 
 
-    def launch(self):
+    def run(self, on_stdout_line, on_stderr_line):
         """
         Start a subprocess and threads to consume its stdout and stderr.
         """
+        self._on_stdout_line = on_stdout_line
+        self._on_stderr_line = on_stderr_line
         msg = "+ Launching process {0} as {1}".format(self._name, self._process_args)
         self._debug(msg)
 
@@ -62,7 +60,7 @@ class Process(object):
         self.stderrThread.start()
 
 
-    def send_input(self, encodedString):
+    def send(self, encodedString):
         if self._process:
             self._debug("> {0}".format(encodedString))
             self._process.stdin.write(bytes(encodedString, 'UTF-8'))
@@ -84,14 +82,14 @@ class Process(object):
 
     def _read_stderr(self):
         """
-        Read and process any errors.
+        Read and dispatch any errors.
         """
         while self._process.poll() is None:
             try:
                 error = self._process.stderr.readline().decode('UTF-8')
                 self._debug(error)
-                if self._on_stderr is not None:
-                    self._on_stderr(error)
+                if self._on_stderr_line is not None:
+                    self._on_stderr_line(error)
             except:
                 self._debug("+ Process {0} ending due to exception: {1}".format(self._name, sys.exc_info()))
                 return
@@ -100,7 +98,7 @@ class Process(object):
 
     def _read_stdout(self):
         """
-        Reads JSON responses from stack-ide and dispatch them.
+        Reads lines from stack-ide's output and dispatches them.
         """
         while self._process.poll() is None:
             try:
@@ -108,8 +106,8 @@ class Process(object):
                 if not line:
                     return
                 self._debug("< {0}".format(line))
-                if self._on_stdout is not None:
-                    self._on_stdout(line)
+                if self._on_stdout_line is not None:
+                    self._on_stdout_line(line)
             except:
                 exc = traceback.format_exception(*sys.exc_info())
                 self._debug("+ Process {0} ending due to exception: {1}".format(self._name, exc))

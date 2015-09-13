@@ -3,20 +3,25 @@ import subprocess
 
 try:
     from stack_ide.api import *
+    from stack_ide.async_session import *
+    from stack_ide.json_stream import *
     from stack_ide.process import *
     from stack_ide.session import *
 except:
     from api import *
+    from async_session import *
+    from json_stream import *
     from process import *
     from session import *
 
 
-def stack_ide_api_for(project_root, target, stack_yaml, debug):
+def stack_ide_api_for(project_root, target, stack_yaml, default_handler, debug):
     stack_ide_process = boot_stack_ide_process(project_root, target, stack_yaml, debug)
-    async_session = AsyncSession(stack_ide_process, debug)
+    json_stream = JsonStream(stack_ide_process, debug)
+    async_session = AsyncSession(json_stream, debug)
     session = Session(async_session, debug)
-    stack_ide_process.launch()
     api = StackIdeApi(session)
+    async_session.run(default_handler)
     return api
 
 
